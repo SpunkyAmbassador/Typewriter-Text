@@ -8,26 +8,36 @@ const stride = RPM.Manager.Plugins.getParameter(pluginName, "Stride variable ID"
 
 function updateWindow(id, x, y, width, height, wholeText, count)
 {
+    console.log(count);
     RPM.Manager.Songs.playSound(RPM.Core.Game.current.variables[textSound], 0.05);
     if (count < wholeText.length)
     {
-        for (var i = RPM.Core.Game.current.variables[stride]; i > 0; i--)
+        var wait = Math.max(RPM.Core.Game.current.variables[textSpeed] * 1000, 5);
+        for (var i = Math.max(RPM.Core.Game.current.variables[stride], 1); i > 0; i--)
         {
             if (wholeText[count] == "[")
             {
+                if (wholeText.substr(count).search(/\[wait=\d*\]/) === 0)
+                {
+                    const n = wholeText.indexOf("]", count);
+                    wait = parseInt(wholeText.slice(count + 6, n)) * 1000;
+                    wholeText = wholeText.substr(0, count) + wholeText.substr(n + 1);
+                    console.log(wholeText);
+                    break;
+                }
                 var j = 1;
                 while (count + j < wholeText.length - 1 && wholeText[count + j] != "[" && wholeText[count + j] != "]")
                     j++;
                 if (!isText(wholeText.substr(count, j + 1)))
                 {
                     count += j;
-                    i += j;
+                    i++;
                 }
             }
             count++;
         }
         spawnWindow(id, x, y, height, width, wholeText.substring(0, count));
-        setTimeout(updateWindow, Math.max(RPM.Core.Game.current.variables[textSpeed] * 1000, 5), id, x, y, width, height, wholeText, count, RPM.Core.Game.current.variables[stride]);
+        setTimeout(updateWindow, wait, id, x, y, width, height, wholeText, count);//, Math.max(RPM.Core.Game.current.variables[stride], 1));
     }
     else
         for (var i = 0; i < RPM.Manager.Stack.displayedPictures.length; i++)
@@ -75,7 +85,7 @@ RPM.Manager.Plugins.registerCommand(pluginName, "Show Text", (id, text, x, y, wi
 });
 // Typewriter plugin code - End
 
-// "Multiple window boxes" plugin code by @Russo (https://github.com/yaleksander/RPM-Plugin-Multiple-window-boxes) - Start
+// "Multiple text boxes" plugin code by @Russo (https://github.com/yaleksander/RPM-Plugin-Multiple-text-boxes) - Start
 RPM.Core.WindowBox.prototype.draw = function (isChoice = false, windowDimension = this.windowDimension, contentDimension = this.contentDimension)
 {
     if (this.content)
@@ -133,4 +143,4 @@ function spawnWindow(id, x, y, width, height, text)
     if (!ok)
         p.push(value);
 };
-// "Multiple window boxes" plugin code by @Russo - End
+// "Multiple text boxes" plugin code by @Russo - End
