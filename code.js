@@ -185,6 +185,5 @@ function spawnWindow(id, x, y, width, height, text)
 	}
 	if (!ok)
 		p.push(value);
-	return value[1];
 };
 // "Multiple text boxes" plugin code by @Russo - End
