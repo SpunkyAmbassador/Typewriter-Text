@@ -2,60 +2,91 @@ import { RPM } from "../path.js"
 
 const pluginName = "Typewriter Text";
 
-const textSpeed = RPM.Manager.Plugins.getParameter(pluginName, "Text speed variable ID");
-const textSound = RPM.Manager.Plugins.getParameter(pluginName, "Text sound variable ID");
-const stride = RPM.Manager.Plugins.getParameter(pluginName, "Stride variable ID");
-
-function updateWindow(id, x, y, width, height, wholeText, count)
+class WaitUntilDoneTyping extends RPM.EventCommand.Base
 {
-	console.log(count);
-	RPM.Manager.Songs.playSound(RPM.Core.Game.current.variables[textSound], 0.05);
+	constructor(id)
+	{
+		super();
+		this.id = id;
+	}
+
+	onKeyPressed(currentState, key)
+	{
+		if (RPM.Datas.Keyboards.checkActionMenu(key) || RPM.Datas.Keyboards.checkCancelMenu(key))
+		{
+			const p = RPM.Manager.Stack.displayedPictures;
+			for (var i = 0; i < p.length; i++)
+				if (p[i][0] === this.id)
+					p[i][1].typewriterTextPlugin_skip = true;
+		}
+	}
+
+	onMouseDown(currentState, x, y)
+	{
+		if (RPM.Datas.Systems.isMouseControls && RPM.Common.Inputs.mouseLeftPressed)
+		{
+			const p = RPM.Manager.Stack.displayedPictures;
+			for (var i = 0; i < p.length; i++)
+				if (p[i][0] === this.id)
+					if (p[i][1].isInside(x, y))
+						p[i][1].typewriterTextPlugin_skip = true;
+		}
+	}
+
+	update(currentState)
+	{
+		if (RPM.Datas.Systems.isMouseControls && RPM.Common.Inputs.mouseLeftPressed)
+			return 0;
+		const p = RPM.Manager.Stack.displayedPictures;
+		for (var i = 0; i < p.length; i++)
+			if (p[i][0] === this.id && !!p[i][1].typewriterTextPlugin_doneTyping)
+				return 1;
+		return 0;
+	}
+}
+
+function updateWindow(id, x, y, width, height, wholeText, count, sound, volume)
+{
+	var w = null;
+	const p = RPM.Manager.Stack.displayedPictures;
+	for (var i = 0; i < p.length; i++)
+		if (p[i][0] === id)
+			w = p[i][1];
 	if (count < wholeText.length)
 	{
-		var wait = Math.max(RPM.Core.Game.current.variables[textSpeed] * 1000, 5);
-		for (var i = Math.max(RPM.Core.Game.current.variables[stride], 1); i > 0; i--)
+		var stride = 1;
+		var wait = 5;
+		if (!!w && w.typewriterTextPlugin_skip)
+			stride = wholeText.length;
+		RPM.Manager.Songs.playSound(sound, volume);
+		for (var i = stride; i > 0; i--)
 		{
 			if (wholeText[count] == "[")
 			{
+				const n = wholeText.indexOf("]", count);
 				if (wholeText.substr(count).search(/\[wait=\d*\]/) === 0)
 				{
-					const n = wholeText.indexOf("]", count);
-					wait = parseInt(wholeText.slice(count + 6, n)) * 1000;
+					wait = parseInt(wholeText.slice(count + 6, n));
 					wholeText = wholeText.substr(0, count) + wholeText.substr(n + 1);
-					console.log(wholeText);
 					break;
 				}
-				var j = 1;
-				while (count + j < wholeText.length - 1 && wholeText[count + j] != "[" && wholeText[count + j] != "]")
-					j++;
-				if (!isText(wholeText.substr(count, j + 1)))
-				{
-					count += j;
-					i++;
-				}
+				console.log(wholeText.substring(count, n + 1), isText(wholeText.substring(count, n + 1)));
+				if (n > 0 && !isText(wholeText.substring(count, n + 1)))
+					count = n;
 			}
 			count++;
 		}
 		spawnWindow(id, x, y, height, width, wholeText.substring(0, count));
-		setTimeout(updateWindow, wait, id, x, y, width, height, wholeText, count);
+		setTimeout(updateWindow, wait, id, x, y, width, height, wholeText, count, sound, volume);
 	}
 	else
-		for (var i = 0; i < RPM.Manager.Stack.displayedPictures.length; i++)
-			if (RPM.Manager.Stack.displayedPictures[i][0] === id)
-				RPM.Manager.Stack.displayedPictures[i][1].typewriterTextPlugin_doneTyping = true;
+		w.typewriterTextPlugin_doneTyping = true;
 }
-
-RPM.Manager.Plugins.registerCommand(pluginName, "Is done typing", (textID, varID) =>
-{
-	RPM.Core.Game.current.variables[varID] = false;
-	for (var i = 0; i < RPM.Manager.Stack.displayedPictures.length; i++)
-		if (RPM.Manager.Stack.displayedPictures[i][0] === textID)
-			RPM.Core.Game.current.variables[varID] = !!RPM.Manager.Stack.displayedPictures[i][1].typewriterTextPlugin_doneTyping;
-});
 
 function isText(text)
 {
-	const m = new RPM.Graphic.Message("[b][i][l][c][r][size=1][font=1][textcolor=1][backcolor=1][strokecolor=1]" + text, -1, 0, 0);
+	console.log(text);
+	const m = new RPM.Graphic.Message(text, -1, 0, 0);
 	m.update();
 	for (var i = 0; i < m.graphics.length; i++)
 	{
@@ -63,14 +94,14 @@ function isText(text)
 			continue;
 		if (m.graphics[i].constructor.name !== "Text")
 			return false;
-		if (m.graphics[i].text.length > 0)
+		if (m.graphics[i].text == text)
 			return true;
 	}
 	return false;
 }
 
 // Typewriter plugin code - Start
-RPM.Manager.Plugins.registerCommand(pluginName, "Show Text", (id, text, x, y, width, height) =>
+RPM.Manager.Plugins.registerCommand(pluginName, "Show Text", (id, text, sound, volume) =>
 {
 	var i;
 	text = text.toString();
@@ -81,7 +112,19 @@ RPM.Manager.Plugins.registerCommand(pluginName, "Show Text", (id, text, x, y, wi
 			break;
 		text = text.slice(0, i + 1) + "\n" + text.slice(i + 3);
 	}
-	updateWindow(id, x, y, width, height, text.replace("\\\\n", "\\n"), 0);
+	const d = RPM.Datas.Systems.dbOptions;
+	updateWindow(id, d.v_x, d.v_y, d.v_h, d.v_w, text.replace("\\\\n", "\\n"), 0, sound.kind === RPM.Common.Enum.SongKind.Sound ? sound.id : 0, Math.max(0, Math.min(100, volume / 100)));
+	const currentCommand = RPM.Core.ReactionInterpreter.currentReaction.currentCommand;
+	if (!currentCommand.typewriterTextPlugin_finishedText)
+	{
+		currentCommand.typewriterTextPlugin_finishedText = true;
+		const nextCommand = currentCommand.next;
+		const showText = new RPM.EventCommand.ShowText([8, "", -1, 0, 0, 1, text.replace(/\[wait=\d*\]/, "").replace("\\n", "\n")]);
+		showText.initialize();
+		currentCommand.next = new RPM.Core.Node(currentCommand.parent, new WaitUntilDoneTyping(id));
+		currentCommand.next.next = new RPM.Core.Node(currentCommand.parent, showText);
+		currentCommand.next.next.next = nextCommand;
+	}
 });
 // Typewriter plugin code - End
 
@@ -142,5 +185,6 @@ function spawnWindow(id, x, y, width, height, text)
 	}
 	if (!ok)
 		p.push(value);
+	return value[1];
 };
 // "Multiple text boxes" plugin code by @Russo - End
